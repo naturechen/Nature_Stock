@@ -6,9 +6,9 @@ from pipeline.loader import Loader
 
 # 数据库配置
 CONFIG = {
-    "host": "localhost",
+    "host": "https://dpbtqqsvjfgdohilmqtp.supabase.co",
     "port": 5432,
-    "dbname": "demo_db",
+    "dbname": "postgres",
     "user": "postgres",
     "password": "123456"
 }
