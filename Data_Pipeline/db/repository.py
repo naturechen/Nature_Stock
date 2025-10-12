@@ -4,10 +4,10 @@ class UserRepository:
         self.cur = cursor
 
     def get_all_users(self):
-        self.cur.execute("SELECT id, name, email FROM users")
+        self.cur.execute("SELECT * FROM stock.ticker_daily")
         return self.cur.fetchall()
 
-    def insert_user(self, name, email):
+    def insert_daily_stock_data(self, name, email):
         self.cur.execute(
             "INSERT INTO users (name, email) VALUES (%s, %s)", (name, email)
         )

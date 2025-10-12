@@ -6,23 +6,23 @@ from pipeline.loader import Loader
 
 # 数据库配置
 CONFIG = {
-    "host": "https://dpbtqqsvjfgdohilmqtp.supabase.co",
+    "host": "localhost",
     "port": 5432,
-    "dbname": "postgres",
+    "dbname": "Finance",
     "user": "postgres",
-    "password": "123456"
+    "password": "Nature1992."
 }
 
 def main():
     with PostgresConnector(CONFIG) as cur:
         extractor = Extractor(cur)
-        transformer = Transformer()
-        loader = Loader(cur)
+        # transformer = Transformer()
+        # loader = Loader(cur)
 
-        # Pipeline 流程
+        # # Pipeline 流程
         raw_users = extractor.extract()
-        cleaned_users = transformer.clean_emails(raw_users)
-        loader.load(cleaned_users)
+        # cleaned_users = transformer.clean_emails(raw_users)
+        # loader.load(cleaned_users)
 
 if __name__ == "__main__":
     main()
