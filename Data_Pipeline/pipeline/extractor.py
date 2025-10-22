@@ -1,9 +1,9 @@
 # pipeline/extractor.py
-from db.repository import UserRepository
+from db.repository import StockRepository
 
 class Extractor:
     def __init__(self, cursor):
-        self.repo = UserRepository(cursor)
+        self.repo = StockRepository(cursor)
 
     def extract(self):
         print("🔹 Extracting data from database...")

@@ -3,7 +3,7 @@ from db.connection import PostgresConnector
 from pipeline.extractor import Extractor
 from pipeline.transformer import Transformer
 from pipeline.loader import Loader
-from Data_Pipeline.pipeline.fetcher import YahooFinanceFetcher
+from pipeline.fetcher import YahooFinanceFetcher
 from db.repository import StockRepository
 
 # 数据库配置
@@ -20,16 +20,21 @@ def main():
     with PostgresConnector(CONFIG) as cur:
         
         db_repo = StockRepository(cur)
-        extractor = Extractor(cur)
+        #extractor = Extractor(cur)
         transformer = Transformer()
-        loader = Loader(cur)
+        #loader = Loader(cur)
         
+
         yahoo_fetcher = YahooFinanceFetcher()
         stock_daily_data = yahoo_fetcher.fetch_stock_data('TSLA', period='1y', interval='1d')
         stock_daily_data = transformer.remove_date_time(stock_daily_data)
+        print(stock_daily_data.head())
 
         db_repo = StockRepository(cur)
         db_repo.insert_daily_data('TSLA', stock_daily_data)
+
+        # djj = db_repo.get_all_users()
+        # print(djj)
 
         # # Pipeline 流程
         # raw_users = extractor.extract()

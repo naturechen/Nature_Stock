@@ -19,15 +19,11 @@ class YahooFinanceFetcher:
             stock = yf.Ticker(ticker)
             df = stock.history(period=period, interval=interval)
             df.reset_index(inplace=True)  # 把日期变成列
+            df.insert(0, 'ticker_id', ticker)  # 在第一列插入股票代码列
+
             return df
         
         except Exception as e:
             print(f"获取 {self.ticker} 数据失败: {e}")
             return pd.DataFrame()  # 返回空 DataFrame 便于调用方处理
     
-
-
-yahoo_fetcher = YahooFinanceFetcher()
-stock_data = yahoo_fetcher.fetch_stock_data('TSLA', period='6mo', interval='1d')
-stock_data['Date'] = stock_data['Date'].dt.date
-print(stock_data.head())
