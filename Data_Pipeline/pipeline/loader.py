@@ -5,8 +5,10 @@ class Loader:
     def __init__(self, cursor):
         self.repo = StockRepository(cursor)
 
-    def load(self, users):
+    def load_ticker_daily_to_db(self, data):
+        
         print("🔹 Loading cleaned data into database...")
-        for _, name, email in users:
-            self.repo.insert_user(name, email)
+        
+        self.repo.insert_daily_data(data)
+
         print("✅ Data loaded successfully")

@@ -1,5 +1,7 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
+import time
 
 class YahooFinanceFetcher:
     """
@@ -27,3 +29,18 @@ class YahooFinanceFetcher:
             print(f"获取 {self.ticker} 数据失败: {e}")
             return pd.DataFrame()  # 返回空 DataFrame 便于调用方处理
     
+
+    def fetch_multiple_daily_stocks(self, tickers:list) -> pd.DataFrame:
+        """
+        抓取多个股票的数据并合并到一个 DataFrame
+        tickers: 股票代码列表，例如 ['AAPL', 'MSFT']
+        """
+        all_data = pd.DataFrame()
+        for ticker in tickers:
+            df = self.fetch_stock_data(ticker, period='1y', interval='1d')
+            all_data = pd.concat([all_data, df], ignore_index=True)
+
+            random_delay = 1 + 1.5 * np.random.rand()
+            time.sleep(random_delay)
+        
+        return all_data
