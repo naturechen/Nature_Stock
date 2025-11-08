@@ -1,13 +1,21 @@
 # db/repository.py
 import io
+import pandas as pd
 
 class StockRepository:
     def __init__(self, cursor):
         self.cur = cursor
 
-    def get_all_users(self):
+    def get_all_daily_data(self):
         self.cur.execute("SELECT * FROM stock.ticker_daily")
-        return self.cur.fetchall()
+        rows = self.cur.fetchall()
+
+        # get column names
+        colnames = [desc[0] for desc in self.cur.description]
+
+        # convert DataFrame
+        df = pd.DataFrame(rows, columns=colnames)
+        return df
 
     def insert_daily_data(self, data):
         """

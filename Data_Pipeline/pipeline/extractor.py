@@ -5,8 +5,9 @@ class Extractor:
     def __init__(self, cursor):
         self.repo = StockRepository(cursor)
 
-    def extract(self):
+    def extract_all_daily_stock_data(self):
         print("🔹 Extracting data from database...")
-        users = self.repo.get_all_users()
-        print(f"✅ Extracted {len(users)} users")
-        return users
+        all_daily = self.repo.get_all_daily_data()
+        all_daily[['open','high','low','close','volume']] = all_daily[['open','high','low','close','volume']].astype(float)
+        print(f"✅ Extracted {len(all_daily)} records successfully")
+        return all_daily
