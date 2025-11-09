@@ -10,29 +10,35 @@ class indicator_calculator:
 
     def calculate_rsi(self):
         # 低于 40 就是 超卖， 高于 70 就是 超买，40-70 之间是正常范围
-
         window: int = 14  # RSI 计算的时间窗口
-        # 确保按股票和日期排序
+
+         # 确保按股票和日期排序
         df = self.data_set.sort_values(by=['ticker_id', 'date']).copy()
-        # 创建一个空的 RSI 列
         df['rsi'] = None
-        
-        # 按 ticker_id 分组计算 RSI
+        df['rsi_score'] = None
+
+        # 按 ticker_id 分组计算 RSI（使用 Wilder 的指数平滑）
         for ticker, group in df.groupby('ticker_id'):
             prices = group['close']
             delta = prices.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-            rs = gain / loss
+
+            # 分离上涨和下跌部分
+            gain = delta.where(delta > 0, 0.0)
+            loss = -delta.where(delta < 0, 0.0)
+
+            # Wilder 平滑（alpha = 1/window），更符合经典 RSI 定义
+            avg_gain = gain.ewm(alpha=1.0/window, adjust=False).mean()
+            avg_loss = loss.ewm(alpha=1.0/window, adjust=False).mean()
+
+            # 避免除以 0
+            rs = avg_gain / (avg_loss.replace(0, 1e-10))
             rsi = 100 - (100 / (1 + rs))
-            rsi = rsi.fillna(50)
+            rsi = rsi.fillna(50)  # 起始若无数据时取中性 50
 
-            # RSI score 映射到 -100 ~ 100
-            # RSI 高于 50 → 负分（卖出倾向）
-            # RSI 低于 50 → 正分（买入倾向）
-            rsi_score = -2 * (rsi - 50)
+            # 映射到 -100 .. 100
+            # 这里用 rsi=50 -> 0；rsi=100 -> +100（强烈超买）；rsi=0 -> -100（强烈超卖）
+            rsi_score = 2 * (rsi - 50)
             rsi_score = rsi_score.clip(-100, 100)
-
 
             df.loc[group.index, 'rsi'] = rsi
             df.loc[group.index, 'rsi_score'] = rsi_score
@@ -504,8 +510,8 @@ class indicator_calculator:
             df.loc[group.index, 'mfi_bearish_divergence'] = bearish_div
             df.loc[group.index, 'mfi_score'] = score # 在0左右可以加仓
 
-            
         return df
+    
     
     def comprehensive_indicator(self):
         """
@@ -535,14 +541,14 @@ class indicator_calculator:
 
         # 权重列表，明确写出
         weights = {
-            'rsi_score': 1,
-            'macd_score': 1,
-            'bb_score': 1,
-            'vwap_score': 1,
-            'stoch_score': 1,
-            'sma_score': 1,
-            'obv_score': 1,
-            'mfi_score': 1
+            'rsi_score': 0.8,
+            'stoch_score': 0.8,
+            'mfi_score': 1.0,   # 平衡指标稍高
+            'macd_score': 1.2,
+            'sma_score': 1.2,
+            'bb_score': 1.0,
+            'vwap_score': 1.0,
+            'obv_score': 0.8
         }
 
         # 计算加权平均
