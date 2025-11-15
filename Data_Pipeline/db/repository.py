@@ -24,6 +24,10 @@ class StockRepository:
         ticker: 股票代码
         data: 包含每日数据的 DataFrame
         """
+
+        # 强制字符串，避免 to_csv 输出空格
+
+        data = data.astype(str)
         buffer = io.StringIO()
         data.to_csv(buffer, sep='\t', header=False, index=False, na_rep='\\N')
         buffer.seek(0)
@@ -45,7 +49,8 @@ class StockRepository:
             """)
 
             # COPY 到临时表
-            self.cur.copy_from(buffer, 'tmp_ticker_daily')
+            # 指定 tab 分隔符
+            self.cur.copy_from(buffer, 'tmp_ticker_daily', sep='\t')
 
             # 合并更新（防止重复主键）
             self.cur.execute("""

@@ -558,6 +558,12 @@ class indicator_calculator:
         # 限制在 -100 ~ 100
         df['comprehensive_score'] = df['comprehensive_score'].clip(-100, 100)
 
+        # 计算平滑分数（3日、5日、10日、15日、20日）
+        for window in [3, 5, 10, 15, 20]:
+            df[f'comprehensive_score_{window}_days'] = df.groupby('ticker_id')['comprehensive_score'].transform(
+                lambda x: x.rolling(window=window, min_periods=1).mean()
+            )
+
         return df
 
 

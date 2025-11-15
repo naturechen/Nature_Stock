@@ -23,6 +23,15 @@ class YahooFinanceFetcher:
             df.reset_index(inplace=True)  # 把日期变成列
             df.insert(0, 'ticker_id', ticker)  # 在第一列插入股票代码列
 
+            # 需要的列
+            required_cols = [
+                'ticker_id', 'Date', 'Open', 'High', 'Low', 'Close',
+                'Volume', 'Dividends', 'Stock Splits'
+            ]
+
+            # 只选择存在的列（自动过滤掉 Capital Gains）
+            df = df[[col for col in required_cols if col in df.columns]]
+
             return df
         
         except Exception as e:
@@ -40,7 +49,7 @@ class YahooFinanceFetcher:
             df = self.fetch_stock_data(ticker, period='1y', interval='1d')
             all_data = pd.concat([all_data, df], ignore_index=True)
 
-            random_delay = 1.5 * np.random.rand()
+            random_delay = 1 * np.random.rand()
             time.sleep(random_delay)
         
         return all_data
