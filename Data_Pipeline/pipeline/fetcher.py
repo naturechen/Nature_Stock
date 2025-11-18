@@ -46,7 +46,7 @@ class YahooFinanceFetcher:
         """
         all_data = pd.DataFrame()
         for ticker in tickers:
-            df = self.fetch_stock_data(ticker, period='1y', interval='1d')
+            df = self.fetch_stock_data(ticker, period='2y', interval='1d')
             all_data = pd.concat([all_data, df], ignore_index=True)
 
             random_delay = 1 * np.random.rand()

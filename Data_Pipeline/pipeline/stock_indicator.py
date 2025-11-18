@@ -554,7 +554,6 @@ class indicator_calculator:
         # 计算加权平均
         total_weight = sum(weights.values())
         df['comprehensive_score'] = sum(df[ind] * w for ind, w in weights.items()) / total_weight
-
         # 限制在 -100 ~ 100
         df['comprehensive_score'] = df['comprehensive_score'].clip(-100, 100)
 
@@ -563,6 +562,13 @@ class indicator_calculator:
             df[f'comprehensive_score_{window}_days'] = df.groupby('ticker_id')['comprehensive_score'].transform(
                 lambda x: x.rolling(window=window, min_periods=1).mean()
             )
+
+        market_daily = df.groupby('date')['comprehensive_score'].mean()   # 每天所有股票的平均值
+        df['market_avg_comprehensive_today'] = df['date'].map(market_daily)
+
+        for window in [3, 5, 10, 15, 20]:
+            market_rolling = market_daily.rolling(window=window, min_periods=1).mean()
+            df[f'market_avg_comprehensive_{window}_days'] = df['date'].map(market_rolling)
 
         return df
 
