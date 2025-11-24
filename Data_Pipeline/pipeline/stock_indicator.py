@@ -180,26 +180,13 @@ class indicator_calculator:
         return df
     
 
-
-    # 成交量加权平均价
     def calculate_vwap(self):
 
-        # 判断趋势（短线或日内交易）:
-        #   价格在 VWAP 之上 → 买方强势，多头市场
-        #   价格在 VWAP 之下 → 卖方强势，空头市场
+        # VWAP 金融含义：
+        #   VWAP 是机构用于当天的“公平价格”
+        #   在日线数据中，Daily VWAP = 当天 typical price
+        #   typical price = (high + low + close) / 3
 
-        # 支撑与阻力:
-        #   当价格回到 VWAP 附近，VWAP 可能成为支撑或阻力
-        #   交易执行参考（机构用）
-
-        #   如果你是大资金买入，目标是尽量低于 VWAP 买入，高于 VWAP 卖出，降低市场冲击成本
-
-        # ≥ +60	明显强于均价 → 买方主导	顺势持有 / 加仓
-        # +20 ～ +60	偏多状态	保持多头
-        # -20 ～ +20	震荡区间	观望 / 等待信号
-        # ≤ -60	明显弱于均价 → 卖方主导	减仓 / 观望
-
-        window: int = 5
         df = self.data_set.sort_values(by=['ticker_id', 'date']).copy()
         df['vwap'] = None
         df['vwap_score'] = None
@@ -212,30 +199,30 @@ class indicator_calculator:
             close = group['close']
             volume = group['volume']
 
-            typical_price = (high + low + close) / 3
-            numerator = (typical_price * volume).rolling(window=window, min_periods=1).sum()
-            denominator = volume.rolling(window=window, min_periods=1).sum()
-            vwap = numerator / denominator
+            # --------------------------
+            # 1) Daily VWAP (标准方法)
+            # --------------------------
+            vwap = (high + low + close) / 3    # 每天独立计算
 
-            # 使用 rolling std 作为尺度（更稳健）
-            rolling_std = close.rolling(window=window, min_periods=1).std().fillna(0)
-            # 防止 std 为 0
+            # --------------------------
+            # 2) VWAP Score（偏离程度）
+            # --------------------------
+            #   z = (close - vwap) / std
+            #   用 rolling std 衡量偏离强弱，防止价格高的股票量纲不同
+
+            rolling_std = close.rolling(window=5, min_periods=1).std().fillna(0)
             rolling_std = rolling_std.replace(0, eps)
 
             z = (close - vwap) / rolling_std
-
-            # 使用 arctan 将 z 映射到 (-100, 100)（平滑且无爆炸）
+            
             vwap_score = np.arctan(z) * (200.0 / np.pi)
-
-            # 可选：再 clip 一次以防万一
             vwap_score = vwap_score.clip(-100, 100)
 
+            # 写回
             df.loc[group.index, 'vwap'] = vwap
             df.loc[group.index, 'vwap_score'] = vwap_score
 
-
         return df
-
 
 
     def calculate_stochastic(self):
@@ -379,7 +366,7 @@ class indicator_calculator:
             -100 ~ -50	卖盘强势，资金流出	空头参考 / 减仓
         """
 
-        lookback: int = 5
+        lookback: int = 16
         df = self.data_set.sort_values(by=['ticker_id', 'date']).copy()
         df['obv'] = np.nan
         df['obv_signal'] = False

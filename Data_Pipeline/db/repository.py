@@ -24,6 +24,7 @@ class StockRepository:
         ticker: 股票代码
         data: 包含每日数据的 DataFrame
         """
+        data = data.drop_duplicates(subset=["ticker_id", "Date"], keep="last")
 
         # 强制字符串，避免 to_csv 输出空格
 
