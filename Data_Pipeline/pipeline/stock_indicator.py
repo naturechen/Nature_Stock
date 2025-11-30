@@ -499,7 +499,187 @@ class indicator_calculator:
 
         return df
     
-    
+
+    def calculate_institutional_flow(self):
+        """
+        计算机构行为评分（Institutional Flow Score, -100~100）
+
+        输出：
+            DataFrame，新增一列：
+                - institutional_score: 机构行为强度（-100 ~ +100）
+                >0：偏向机构吸筹
+                <0：偏向机构派发
+        """
+
+        df = self.data_set.sort_values(by=['ticker_id', 'date']).copy()
+        df['institutional_score'] = np.nan
+
+        eps = 1e-9
+
+        for ticker, group in df.groupby('ticker_id', sort=False):
+
+            g = group.copy()
+
+            # ========= 1. 基础字段 =========
+            high = g['high'].astype(float)
+            low = g['low'].astype(float)
+            open_ = g['open'].astype(float)
+            close = g['close'].astype(float)
+            volume = g['volume'].astype(float)
+
+            # 范围、实体、上下影线
+            volatility = (high - low).replace(0, np.nan)
+            range_ = volatility.replace(0, np.nan)
+
+            body = (close - open_).abs()
+            body_ratio = (body / (range_ + eps)).clip(0, 1).fillna(0)  # 0~1，越大实体越大
+
+            upper_wick = high - np.maximum(open_, close)
+            lower_wick = np.minimum(open_, close) - low
+
+            upper_ratio = (upper_wick / (range_ + eps)).clip(0, 1).fillna(0)
+            lower_ratio = (lower_wick / (range_ + eps)).clip(0, 1).fillna(0)
+
+            # ========= 2. 趋势 & 波动过滤 =========
+            close_ma5 = close.rolling(5, min_periods=3).mean()
+            close_ma20 = close.rolling(20, min_periods=10).mean()
+            close_ma60 = close.rolling(60, min_periods=20).mean()
+
+            # 短期 & 中期收益率
+            ret_5 = close / close.shift(5) - 1
+            ret_10 = close / close.shift(10) - 1
+
+            # 趋势因子：越偏离中期均线，绝对值越大
+            trend_raw = (close - close_ma20) / (close_ma20 + eps)
+            # 映射到[-1,1]，在极端趋势时抑制“吸筹分”
+            trend_factor = np.tanh(trend_raw * 3).fillna(0)  # 上涨趋势接近+1，暴跌接近-1
+
+            # 波动率 & 成交量 z-score
+            vol_ma20 = volatility.rolling(20, min_periods=10).mean()
+            vol_std20 = volatility.rolling(20, min_periods=10).std()
+            vol_z = ((volatility - vol_ma20) / (vol_std20 + eps)).fillna(0)
+
+            vol_ma = volume.rolling(20, min_periods=10).mean()
+            vol_std = volume.rolling(20, min_periods=10).std()
+            vol_zscore = ((volume - vol_ma) / (vol_std + eps)).fillna(0)
+
+            # 暴跌恐慌检测：5日跌幅大 + 波动/成交量爆炸
+            crash = (ret_5 < -0.08) & (vol_z > 1.5) & (vol_zscore > 1.5)
+            crash_factor = np.where(crash, 0.3, 1.0)  # 暴跌期间，把吸筹分打 7 折
+
+            # ========= 3. 价格-成交量相关性 =========
+            price_diff = close.diff()
+            volume_diff = volume.diff()
+            corr_pv = price_diff.rolling(30, min_periods=10).corr(volume_diff).fillna(0)
+
+            # 负相关 → 价格跌、量增 → 逆势吸筹
+            acc_corr = (-corr_pv).clip(lower=0)     # 只有负相关部分
+            # 正相关 → 涨价放量 → 可能派发
+            dist_corr = (corr_pv).clip(lower=0)
+
+            # ========= 4. 吸筹因子（0~1） =========
+            # 4.1 下影线主导（托底）
+            acc_wick = (lower_ratio - upper_ratio).clip(lower=0)
+
+            # 4.2 小实体 + 非强烈阴线
+            small_body = (1 - body_ratio).clip(0, 1)
+            # 只在非大阴线（或者小实体阴线）时计入吸筹
+            is_big_red = (close < open_) & (body_ratio > 0.6)
+            acc_body = np.where(is_big_red, 0, small_body)
+
+            # 4.3 Volume / Volatility：稳健吃货（高成交 + 相对低波动）
+            vvr = (volume / (volatility + eps))
+            vvr_rank = vvr.rank(pct=True).fillna(0)  # 0~1
+            acc_vvr = vvr_rank
+
+            # 4.4 成交量略高于均值但不是暴冲（避免 panic）
+            mild_vol = ((vol_zscore > 0.2) & (vol_zscore < 2.0)).astype(float)
+
+            # 综合吸筹原始分（0~1）
+            acc_raw = (
+                0.35 * acc_wick +
+                0.25 * acc_body +
+                0.25 * acc_corr +
+                0.15 * acc_vvr * mild_vol
+            )
+
+            # 正规化到 0~1
+            acc_raw = acc_raw.clip(0, 1)
+
+            # ========= 5. 派发因子（0~1） =========
+            # 5.1 上影线（冲高回落）
+            dist_wick = (upper_ratio - lower_ratio).clip(lower=0)
+
+            # 5.2 大实体阴线（砸盘）
+            dist_big_red = (is_big_red).astype(float)
+
+            # 5.3 成交量/波动率异常放大
+            vol_spike = (vol_zscore > 1.5).astype(float)
+            vola_spike = (vol_z > 1.5).astype(float)
+
+            # 5.4 正相关：涨价放量 or 跌价放量（追涨杀跌）
+            dist_corr_term = dist_corr
+
+            dist_raw = (
+                0.30 * dist_wick +
+                0.30 * dist_big_red +
+                0.25 * dist_corr_term +
+                0.15 * (vol_spike + vola_spike) / 2.0
+            )
+
+            dist_raw = dist_raw.clip(0, 1)
+
+            # ========= 6. 合成单一机构分数 =========
+            # 基础差值：吸筹强度 - 派发强度 → [-1,1]
+            base_score = acc_raw - dist_raw
+
+            # 趋势过滤：明确大跌趋势中，不要给太高吸筹分
+            # 暴跌时 crash_factor < 1，也会抑制分数绝对值
+            adjusted_score = base_score * crash_factor
+
+            # 对于极端趋势做进一步抑制：强上涨 or 强下跌
+            trend_suppress = (0.6 + 0.4 * (1 - np.abs(trend_factor)))  # 趋势越极端，系数越接近 0.6
+            adjusted_score = adjusted_score * trend_suppress
+
+            # 放大到 -100 ~ +100
+            institutional_score = (adjusted_score * 100).clip(-100, 100)
+
+            df.loc[g.index, 'institutional_score'] = institutional_score.values
+
+                    # =====================================================================
+            # =======================  新增：散户行为评分  =========================
+            # =====================================================================
+
+            # 散户追涨（FOMO）因子
+            retail_buy = (
+                0.35 * dist_corr +                              # 涨价放量 → 追涨
+                0.25 * body_ratio +                             # 大实体 → 冲动买
+                0.20 * (vol_zscore > 1).astype(float) +         # 成交量暴增 → 散户跟风
+                0.20 * (upper_ratio < 0.3).astype(float)        # 上影短 → 盲目追涨
+            ).clip(0, 1)
+
+            # 散户割肉因子
+            retail_sell = (
+                0.40 * dist_big_red +                           # 大阴线 → 恐慌割
+                0.30 * (vol_zscore > 1.2).astype(float) +        # 恐慌性成交量
+                0.20 * (lower_ratio < 0.1).astype(float) +       # 下影短 → 割肉干净
+                0.10 * (-corr_pv).clip(lower=0)                 # 跌价放量 → 恐慌卖出
+            ).clip(0, 1)
+
+            # 散户基础分
+            retail_base = retail_buy - retail_sell
+
+            # 同样使用趋势 & 暴跌过滤
+            retail_adjusted = retail_base * crash_factor * trend_suppress
+
+            retail_score = (retail_adjusted * 100).clip(-100, 100)
+
+            df.loc[g.index, "retail_score"] = retail_score.values
+
+        return df
+
+
+
     def comprehensive_indicator(self):
         """
         计算综合技术指标评分（Technical Indicator Score）
@@ -517,6 +697,7 @@ class indicator_calculator:
         sma_df = self.calculate_sma_crossover()
         obv_df = self.calculate_obv()
         mfi_df = self.calculate_mfi()
+        ins_flow_df = self.calculate_institutional_flow()
 
         # 合并所有评分
         df = self.data_set.sort_values(by=['ticker_id', 'date']).copy()
@@ -545,7 +726,7 @@ class indicator_calculator:
         df['comprehensive_score'] = df['comprehensive_score'].clip(-100, 100)
 
         # 计算平滑分数（3日、5日、10日、15日、20日）
-        for window in [3, 5, 10, 15, 20]:
+        for window in [5, 10, 20, 50]:
             df[f'comprehensive_score_{window}_days'] = df.groupby('ticker_id')['comprehensive_score'].transform(
                 lambda x: x.rolling(window=window, min_periods=1).mean()
             )
@@ -553,9 +734,17 @@ class indicator_calculator:
         market_daily = df.groupby('date')['comprehensive_score'].mean()   # 每天所有股票的平均值
         df['market_avg_comprehensive_today'] = df['date'].map(market_daily)
 
-        for window in [3, 5, 10, 15, 20]:
+        for window in [5, 10, 20, 50]:
             market_rolling = market_daily.rolling(window=window, min_periods=1).mean()
             df[f'market_avg_comprehensive_{window}_days'] = df['date'].map(market_rolling)
+        
+        for window in [5, 10, 20, 50]:
+            df[f'close_ma{window}'] = df.groupby('ticker_id')['close'].transform(
+                lambda x: x.rolling(window=window, min_periods=1).mean()
+            )
+        
+        df = df.merge(ins_flow_df[['ticker_id', 'date', 'institutional_score', 'retail_score']],
+                  on=['ticker_id', 'date'], how='left')
 
         return df
 
