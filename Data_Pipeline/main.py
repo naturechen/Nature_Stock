@@ -54,7 +54,7 @@ def stock_list():
 
         # 8. 航空航天 / 国防军工 / 太空 & eVTOL
         'RKLB', 'PL', 'ASTS', 'SPIR', 'RDW', 'SPCE', 'SATL', 'MNTS','JOBY', 'ACHR', 'AERO',
-        'LMT', 'NOC', 'RTX', 'GD', 'HII','KTOS', 'AVAV', 'VSEC','BA', 'TXT', 'SPR', 'HWM',
+        'LMT', 'NOC', 'RTX', 'GD', 'HII','KTOS', 'AVAV', 'VSEC','BA', 'TXT', 'SPR', 'HWM', 'SATS',
 
         # 9. 金融 / 银行 / 券商 / 保险 / 支付 & 金融科技
         'SCHW', 'SPFI','V', 'MA', 'AXP', 'CPAY','TRU','PGR', 'TRV', 'ALL','NU', 'PYPL', 'SOFI', 'AFRM', 'UPST','FUTU', 'PAYS',
@@ -87,7 +87,9 @@ def stock_list():
         'OKLO', 'CRWV', 'IREN', 'BTQ','WGS', 'RCAT', 'LAES', 'DFLI', 'CRCL','SLMT', 'XYZ', 'GEV', 'DAVE', 'HSAI', 'HOG','MANU', 'DJT', 'RDDT',
         'TEM', 'NNE',"ADP", "ANET", "APLD", "APP", "ARES","BEAM", "BILL", "BLSH", "BMNR", "CLS","CMCSA", "COP", "CRC", "D", "DKNG","EBAY", "EXAS", "FIG", "GLD", "GLOB",
         "GOEV", "HD", "HLT", "IBM", "ILMN","IRDM", "KKR", "KMI", "KNF", "KVYO","LHX", "LINE", "LKNCY", "LMND", "LVMUY",
-        "MCO", "MSTR", "NOV", "ODD", "PDYN","PSTG", "QMCO", "SERV", "SG", "SMCI", "SN", "SNDK", "TER", "TM", "TMO","TRVN", "WSO"
+        "MCO", "MSTR", "NOV", "ODD", "PDYN","PSTG", "QMCO", "SERV", "SG", "SMCI", "SN", "SNDK", "TER", "TM", "TMO","TRVN", "WSO",
+        
+        "FN"
     ]
 
     return stock_lists
@@ -97,15 +99,16 @@ def main():
 
     with PostgresConnector(CONFIG) as cur:
         
-        # yahoo_fetcher = YahooFinanceFetcher()
-        # stock_daily_data = yahoo_fetcher.fetch_multiple_daily_stocks(stock_list())
+        print("Starting ETL Process...")
+        yahoo_fetcher = YahooFinanceFetcher()
+        stock_daily_data = yahoo_fetcher.fetch_multiple_daily_stocks(stock_list())
 
-        # transformer = Transformer()
-        # stock_daily_data = transformer.remove_date_time(stock_daily_data)
-        # print(stock_daily_data.head())
+        transformer = Transformer()
+        stock_daily_data = transformer.remove_date_time(stock_daily_data)
+        print(stock_daily_data.head())
 
-        # loader = Loader(cur)
-        # loader.load_ticker_daily_to_db(stock_daily_data)
+        loader = Loader(cur)
+        loader.load_ticker_daily_to_db(stock_daily_data)
 
         # calculate indicators and update to db
         extractor = Extractor(cur)
@@ -116,7 +119,7 @@ def main():
         results = ic.comprehensive_indicator()
 
         results.to_csv("data.csv", index=False)
-
+        print("Successful Indicators calculated and saved to data.csv")
 
 
 if __name__ == "__main__":
